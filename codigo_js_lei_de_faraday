@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulação Educacional: Lei de Faraday</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --panel-bg: #1e293b;
+      --text-color: #f8fafc;
+      --accent: #38bdf8;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 { margin-bottom: 2px; font-size: 1.6rem; color: #f1f5f9; text-align: center; }
+    p.subtitle { margin-top: 0; color: #94a3b8; font-size: 0.9rem; text-align: center; margin-bottom: 15px; }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      max-width: 950px;
+      width: 100%;
+    }
+    
+    .canvas-container {
+      position: relative;
+      background: #090d16;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      border: 1px solid #334155;
+      overflow: hidden;
+    }
+    
+    canvas { display: block; cursor: crosshair; }
+
+    .controls {
+      background: var(--panel-bg);
+      padding: 15px 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      border: 1px solid #334155;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    
+    label { font-weight: 600; font-size: 0.85rem; color: #cbd5e1; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      flex: 1;
+      padding: 8px 12px;
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #334155;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    button:hover { background: #475569; border-color: #64748b; }
+    button.active { background: #2563eb; border-color: #3b82f6; }
+    button.success { background: #16a34a; border-color: #22c55e; }
+    button.success:hover { background: #15803d; }
+    button.danger { background: #dc2626; border-color: #ef4444; }
+    button.danger:hover { background: #b91c1c; }
+
+    .formula-box {
+      background: #172554;
+      border-left: 4px solid var(--accent);
+      padding: 14px 20px;
+      border-radius: 6px;
+      font-size: 1rem;
+      color: #e0f2fe;
+    }
+
+    .math-display {
+      font-size: 1.25rem;
+      margin: 8px 0;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 8px;
+      border-radius: 6px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+
+  <h1>Simulação da Lei de Indução de Faraday</h1>
+  <p class="subtitle">Laboratório Virtual Interativo de Eletromagnetismo</p>
+
+  <div class="container">
+    <div class="canvas-container">
+      <canvas id="simCanvas" width="950" height="520"></canvas>
+    </div>
+
+    <div class="formula-box">
+      <strong>Lei da Indução de Faraday-Lenz:</strong>
+      <div class="math-display">
+        $$\mathcal{E} = -N \frac{\Delta \Phi}{\Delta t}$$
+      </div>
+      <small style="color: #93c5fd;">
+        • <strong>\(\mathcal{E}\):</strong> Força Eletromotriz Induzida (o sinal indica a polaridade).<br>
+        • <strong>\(N\):</strong> Número de espiras da bobina.<br>
+        • <strong>\(\Delta \Phi / \Delta t\):</strong> Variação do fluxo magnético no tempo.
+      </small>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label>Controle de Oscilação Automatizada:</label>
+        <div class="btn-group">
+          <button id="startBtn" class="success">Iniciar</button>
+          <button id="resetBtn" class="danger">Resetar</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label for="turns">Número de Espiras (N): <span id="turnsVal">6</span></label>
+        <input type="range" id="turns" min="1" max="12" value="6">
+      </div>
+      
+      <div class="control-group">
+        <label for="magnetSpeed">Velocidade de Oscilação Auto:</label>
+        <input type="range" id="magnetSpeed" min="0.5" max="5" value="2" step="0.5">
+      </div>
+
+      <div class="control-group">
+        <label>Exibição & Polos:</label>
+        <div class="btn-group">
+          <button id="flipBtn">Inverter Polos</button>
+          <button id="linesBtn" class="active">Linhas de Campo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+const INITIAL_STATE = {
+  coilX: 520,
+  coilY: 250,
+  coilRadiusY: 65,
+  coilRadiusX: 18,
+  coilTurns: 6,
+  magnetX: 180,
+  magnetY: 250,
+  magnetWidth: 140,
+  magnetHeight: 42,
+  isNorthLeft: false,
+  autoSpeed: 2
+};
+
+const coil = {
+  x: INITIAL_STATE.coilX,
+  y: INITIAL_STATE.coilY,
+  radiusY: INITIAL_STATE.coilRadiusY,
+  radiusX: INITIAL_STATE.coilRadiusX,
+  turns: INITIAL_STATE.coilTurns
+};
+
+const magnet = {
+  x: INITIAL_STATE.magnetX,
+  y: INITIAL_STATE.magnetY,
+  width: INITIAL_STATE.magnetWidth,
+  height: INITIAL_STATE.magnetHeight,
+  isNorthLeft: INITIAL_STATE.isNorthLeft,
+  isDragging: false,
+  dragOffsetX: 0,
+  vx: 0,
+  prevX: INITIAL_STATE.magnetX
+};
+
+let isRunning = false;
+let autoSpeed = INITIAL_STATE.autoSpeed;
+let autoAngle = 0;
+let showFieldLines = true;
+
+let signedEMF = 0;
+let flux = 0;
+let prevFlux = 0;
+
+const historyLength = 200;
+let fluxHistory = new Array(historyLength).fill(0);
+let emfHistory = new Array(historyLength).fill(0);
+
+const startBtn = document.getElementById('startBtn');
+const resetBtn = document.getElementById('resetBtn');
+const turnsInput = document.getElementById('turns');
+const turnsVal = document.getElementById('turnsVal');
+const speedInput = document.getElementById('magnetSpeed');
+const flipBtn = document.getElementById('flipBtn');
+const linesBtn = document.getElementById('linesBtn');
+
+startBtn.addEventListener('click', () => {
+  isRunning = !isRunning;
+  if (isRunning) {
+    startBtn.textContent = 'Pausar';
+    startBtn.classList.remove('success');
+    startBtn.classList.add('active');
+  } else {
+    startBtn.textContent = 'Iniciar';
+    startBtn.classList.remove('active');
+    startBtn.classList.add('success');
+  }
+});
+
+resetBtn.addEventListener('click', () => {
+  isRunning = false;
+  startBtn.textContent = 'Iniciar';
+  startBtn.classList.remove('active');
+  startBtn.classList.add('success');
+
+  magnet.x = INITIAL_STATE.magnetX;
+  magnet.prevX = INITIAL_STATE.magnetX;
+  magnet.isNorthLeft = INITIAL_STATE.isNorthLeft;
+  autoAngle = 0;
+  autoSpeed = INITIAL_STATE.autoSpeed;
+  speedInput.value = INITIAL_STATE.autoSpeed;
+
+  coil.turns = INITIAL_STATE.coilTurns;
+  turnsInput.value = INITIAL_STATE.coilTurns;
+  turnsVal.textContent = INITIAL_STATE.coilTurns;
+
+  signedEMF = 0;
+  flux = 0;
+  prevFlux = 0;
+
+  fluxHistory = new Array(historyLength).fill(0);
+  emfHistory = new Array(historyLength).fill(0);
+});
+
+turnsInput.addEventListener('input', (e) => {
+  coil.turns = parseInt(e.target.value);
+  turnsVal.textContent = coil.turns;
+});
+
+speedInput.addEventListener('input', (e) => {
+  autoSpeed = parseFloat(e.target.value);
+});
+
+flipBtn.addEventListener('click', () => {
+  magnet.isNorthLeft = !magnet.isNorthLeft;
+});
+
+linesBtn.addEventListener('click', () => {
+  showFieldLines = !showFieldLines;
+  linesBtn.classList.toggle('active', showFieldLines);
+});
+
+canvas.addEventListener('mousedown', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if (mx >= magnet.x - magnet.width/2 && mx <= magnet.x + magnet.width/2 &&
+      my >= magnet.y - magnet.height/2 && my <= magnet.y + magnet.height/2) {
+    magnet.isDragging = true;
+    magnet.dragOffsetX = mx - magnet.x;
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (magnet.isDragging) {
+    const rect = canvas.getBoundingClientRect();
+    magnet.x = (e.clientX - rect.left) - magnet.dragOffsetX;
+    magnet.x = Math.max(90, Math.min(860, magnet.x));
+  }
+});
+
+window.addEventListener('mouseup', () => magnet.isDragging = false);
+
+function calculateFlux() {
+  const dist = (magnet.x - coil.x);
+  const poleSign = magnet.isNorthLeft ? -1 : 1;
+  const B = (140000 / Math.pow(dist * dist + 2200, 1.5)) * poleSign * (dist < 0 ? 1 : -1);
+  return B * coil.turns;
+}
+
+function updatePhysics() {
+  if (isRunning && !magnet.isDragging) {
+    autoAngle += autoSpeed * 0.035;
+    magnet.x = 320 + Math.sin(autoAngle) * 170;
+  }
+
+  magnet.vx = magnet.x - magnet.prevX;
+  magnet.prevX = magnet.x;
+
+  flux = calculateFlux();
+  const dFlux = flux - prevFlux;
+  
+  const targetEMF = -dFlux * 2.2;
+  signedEMF = signedEMF * 0.4 + targetEMF * 0.6;
+  prevFlux = flux;
+
+  fluxHistory.push(flux);
+  fluxHistory.shift();
+  emfHistory.push(signedEMF);
+  emfHistory.shift();
+}
+
+function drawFieldLines() {
+  if (!showFieldLines) return;
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+
+  const northX = magnet.x + (magnet.isNorthLeft ? -magnet.width/2 : magnet.width/2);
+  const southX = magnet.x + (magnet.isNorthLeft ? magnet.width/2 : -magnet.width/2);
+  const arcs = [-65, -40, -20, 20, 40, 65];
+
+  arcs.forEach(h => {
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(56, 189, 248, ${Math.max(0.15, 0.55 - Math.abs(h)/120)})`;
+    ctx.moveTo(northX, magnet.y);
+    const controlY = magnet.y + h * 3.2;
+    const midX = (northX + southX) / 2;
+    ctx.quadraticCurveTo(midX, controlY, southX, magnet.y);
+    ctx.stroke();
+
+    const arrowPos = 0.5;
+    const ax = (1 - arrowPos) * (1 - arrowPos) * northX + 2 * (1 - arrowPos) * arrowPos * midX + arrowPos * arrowPos * southX;
+    const ay = (1 - arrowPos) * (1 - arrowPos) * magnet.y + 2 * (1 - arrowPos) * arrowPos * controlY + arrowPos * arrowPos * magnet.y;
+    
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.arc(ax, ay, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
+function drawMagnet() {
+  ctx.save();
+  ctx.translate(magnet.x, magnet.y);
+
+  const w = magnet.width;
+  const h = magnet.height;
+
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 4;
+
+  ctx.fillStyle = magnet.isNorthLeft ? '#ef4444' : '#3b82f6';
+  ctx.fillRect(-w/2, -h/2, w/2, h);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText(magnet.isNorthLeft ? 'N' : 'S', -w/4 - 6, 6);
+
+  ctx.fillStyle = magnet.isNorthLeft ? '#3b82f6' : '#ef4444';
+  ctx.fillRect(0, -h/2, w/2, h);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(magnet.isNorthLeft ? 'S' : 'N', w/4 - 6, 6);
+
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#f8fafc';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(-w/2, -h/2, w, h);
+
+  ctx.restore();
+}
+
+function drawCoil(backLayer) {
+  ctx.save();
+  const spacing = Math.min(22, 260 / coil.turns);
+  const startX = coil.x - (coil.turns * spacing) / 2 + spacing/2;
+
+  ctx.lineWidth = 5.5;
+
+  for (let i = 0; i < coil.turns; i++) {
+    const cx = startX + i * spacing;
+    ctx.beginPath();
+    if (backLayer) {
+      ctx.strokeStyle = '#b91c1c';
+      ctx.ellipse(cx, coil.y, coil.radiusX, coil.radiusY, 0, Math.PI / 2, (3 * Math.PI) / 2);
+    } else {
+      ctx.strokeStyle = '#ef4444';
+      ctx.ellipse(cx, coil.y, coil.radiusX, coil.radiusY, 0, (3 * Math.PI) / 2, Math.PI / 2);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawInstrumentsAndCircuits() {
+  const vx = 350;
+  const lx = 630;
+  const topY = 90;
+  const radius = 46;
+
+  ctx.save();
+
+  const spacing = Math.min(22, 260 / coil.turns);
+  const coilLeft = coil.x - (coil.turns * spacing) / 2;
+  const coilRight = coil.x + (coil.turns * spacing) / 2;
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 3;
+
+  ctx.moveTo(coilLeft, coil.y);
+  ctx.lineTo(260, coil.y);
+  ctx.lineTo(260, topY);
+  ctx.lineTo(lx + 14, topY);
+
+  ctx.moveTo(coilRight, coil.y);
+  ctx.lineTo(720, coil.y);
+  ctx.lineTo(720, topY);
+  ctx.lineTo(lx - 14, topY);
+
+  ctx.moveTo(vx - radius, topY);
+  ctx.lineTo(vx + radius, topY);
+  ctx.stroke();
+
+  // Lâmpada Incandescente
+  const absEMF = Math.abs(signedEMF);
+  const brightness = Math.min(absEMF / 25, 1);
+
+  if (brightness > 0.02) {
+    const glowRadius = 30 + 70 * brightness;
+    const glowGradient = ctx.createRadialGradient(lx, topY - 35, 8, lx, topY - 35, glowRadius);
+    glowGradient.addColorStop(0, `rgba(255, 255, 200, ${Math.min(1, brightness * 1.2)})`);
+    glowGradient.addColorStop(0.3, `rgba(253, 224, 71, ${brightness * 0.9})`);
+    glowGradient.addColorStop(0.7, `rgba(251, 191, 36, ${brightness * 0.4})`);
+    glowGradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
+
+    ctx.fillStyle = glowGradient;
+    ctx.beginPath();
+    ctx.arc(lx, topY - 35, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.beginPath();
+  ctx.arc(lx, topY - 35, 32, 0, Math.PI * 2);
+  ctx.fillStyle = brightness > 0.05 
+    ? `rgba(254, 240, 138, ${0.3 + brightness * 0.7})` 
+    : 'rgba(255, 255, 255, 0.12)';
+  ctx.fill();
+  ctx.strokeStyle = brightness > 0.1 ? '#fef08a' : '#64748b';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(lx - 10, topY - 20);
+  ctx.lineTo(lx - 5, topY - 42);
+  ctx.lineTo(lx, topY - 28);
+  ctx.lineTo(lx + 5, topY - 42);
+  ctx.lineTo(lx + 10, topY - 20);
+  ctx.strokeStyle = brightness > 0.05 
+    ? `rgb(255, ${Math.floor(255 - brightness * 50)}, ${Math.floor(255 - brightness * 200)})` 
+    : '#475569';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(lx - 14, topY - 10, 28, 14);
+
+  // Voltímetro Analógico + Digital
+  ctx.fillStyle = '#1e293b';
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(vx, topY - 15, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 1.2;
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '8px sans-serif';
+  ctx.textAlign = 'center';
+
+  for (let a = -50; a <= 50; a += 25) {
+    const rad = (a - 90) * (Math.PI / 180);
+    const x1 = vx + Math.cos(rad) * (radius - 10);
+    const y1 = topY - 15 + Math.sin(rad) * (radius - 10);
+    const x2 = vx + Math.cos(rad) * (radius - 4);
+    const y2 = topY - 15 + Math.sin(rad) * (radius - 4);
+    
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    const val = Math.round((a / 50) * 30);
+    const tx = vx + Math.cos(rad) * (radius - 16);
+    const ty = topY - 15 + Math.sin(rad) * (radius - 16) + 3;
+    ctx.fillText(val > 0 ? `+${val}` : val, tx, ty);
+  }
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillText('V', vx, topY - 2);
+
+  ctx.fillStyle = '#090d16';
+  ctx.fillRect(vx - 24, topY + 6, 48, 14);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(vx - 24, topY + 6, 48, 14);
+  ctx.fillStyle = signedEMF >= 0 ? '#4ade80' : '#f43f5e';
+  ctx.font = '9px monospace';
+  ctx.fillText(`${signedEMF >= 0 ? '+' : ''}${signedEMF.toFixed(1)}V`, vx, topY + 16);
+
+  const maxVal = 30;
+  const clampedEMF = Math.max(-maxVal, Math.min(maxVal, signedEMF));
+  const angleDeg = (clampedEMF / maxVal) * 50;
+  const needleRad = (angleDeg - 90) * (Math.PI / 180);
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 2;
+  ctx.moveTo(vx, topY - 10);
+  ctx.lineTo(vx + Math.cos(needleRad) * (radius - 8), topY - 10 + Math.sin(needleRad) * (radius - 8));
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.fillStyle = '#f8fafc';
+  ctx.arc(vx, topY - 10, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Painel de Informações
+  const gx = 825;
+  const gy = 85;
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(gx - 60, gy - 40, 120, 80);
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(gx - 60, gy - 40, 120, 80);
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`FEM (ε): ${signedEMF >= 0 ? '+' : ''}${signedEMF.toFixed(1)}V`, gx - 52, gy - 12);
+  ctx.fillText(`Fluxo (Φ): ${Math.round(flux)}`, gx - 52, gy + 12);
+  ctx.fillText(`Polo Esq: ${magnet.isNorthLeft ? 'NORTE' : 'SUL'}`, gx - 52, gy + 32);
+
+  ctx.restore();
+}
+
+function drawGraph() {
+  const gx = 50;
+  const gy = 375;
+  const gw = 850;
+  const gh = 110;
+
+  ctx.save();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(gx, gy, gw, gh);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(gx, gy, gw, gh);
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#475569';
+  ctx.setLineDash([4, 4]);
+  ctx.moveTo(gx, gy + gh / 2);
+  ctx.lineTo(gx + gw, gy + gh / 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('Gráfico em Tempo Real (Osciloscópio)', gx + 12, gy + 18);
+  
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillText('— Fluxo (Φ)', gx + 640, gy + 18);
+  
+  ctx.fillStyle = '#f43f5e';
+  ctx.fillText('— Tensão / FEM (ε)', gx + 640, gy + 36);
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < historyLength; i++) {
+    const x = gx + (i / historyLength) * gw;
+    const y = gy + gh / 2 - fluxHistory[i] * 0.08;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#f43f5e';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < historyLength; i++) {
+    const x = gx + (i / historyLength) * gw;
+    const y = gy + gh / 2 - emfHistory[i] * 1.2;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  updatePhysics();
+  drawFieldLines();
+  drawCoil(true);
+  drawMagnet();
+  drawCoil(false);
+  drawInstrumentsAndCircuits();
+  drawGraph();
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+</body>
+</html>
