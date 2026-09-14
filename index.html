@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Simulação Educacional: Lei de Faraday</title>
+  <title>Simulação Educacional: Lei da Indução de Faraday</title>
   <style>
     :root {
       --bg-color: #0f172a;
@@ -11,23 +11,24 @@
       --text-color: #f8fafc;
       --accent: #38bdf8;
     }
+    * { box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', system-ui, sans-serif;
       background-color: var(--bg-color);
       color: var(--text-color);
       margin: 0;
-      padding: 20px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
-    h1 { margin-bottom: 2px; font-size: 1.6rem; color: #f1f5f9; text-align: center; }
-    p.subtitle { margin-top: 0; color: #94a3b8; font-size: 0.9rem; text-align: center; margin-bottom: 15px; }
+    h1 { margin-bottom: 4px; font-size: 1.4rem; color: #f1f5f9; text-align: center; }
+    p.subtitle { margin-top: 0; color: #94a3b8; font-size: 0.85rem; text-align: center; margin-bottom: 12px; }
     
     .container {
       display: flex;
       flex-direction: column;
-      gap: 15px;
+      gap: 12px;
       max-width: 950px;
       width: 100%;
     }
@@ -39,19 +40,25 @@
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
       border: 1px solid #334155;
       overflow: hidden;
+      width: 100%;
     }
     
-    canvas { display: block; cursor: crosshair; }
+    canvas { 
+      display: block; 
+      width: 100%; 
+      height: auto; 
+      cursor: crosshair; 
+    }
 
     .controls {
       background: var(--panel-bg);
-      padding: 15px 20px;
+      padding: 15px;
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       border: 1px solid #334155;
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 15px;
+      gap: 12px;
     }
 
     .control-group {
@@ -70,7 +77,7 @@
 
     button {
       flex: 1;
-      padding: 8px 12px;
+      padding: 10px 12px;
       cursor: pointer;
       border-radius: 6px;
       border: 1px solid #475569;
@@ -90,26 +97,33 @@
     .formula-box {
       background: #172554;
       border-left: 4px solid var(--accent);
-      padding: 14px 20px;
+      padding: 12px 16px;
       border-radius: 6px;
-      font-size: 1rem;
+      font-size: 0.95rem;
       color: #e0f2fe;
     }
 
     .math-display {
-      font-size: 1.25rem;
-      margin: 8px 0;
+      font-size: 1.15rem;
+      margin: 6px 0;
       text-align: center;
       background: rgba(0, 0, 0, 0.2);
-      padding: 8px;
+      padding: 6px;
       border-radius: 6px;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 6px; }
+      h1 { font-size: 1.2rem; }
+      .controls { grid-template-columns: 1fr; }
+      .formula-box { font-size: 0.85rem; }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
 </head>
 <body>
 
-  <h1>Simulação da Lei de Indução de Faraday</h1>
+  <h1>Simulação da Lei da Indução de Faraday</h1>
   <p class="subtitle">Laboratório Virtual Interativo de Eletromagnetismo</p>
 
   <div class="container">
@@ -273,27 +287,57 @@ linesBtn.addEventListener('click', () => {
   linesBtn.classList.toggle('active', showFieldLines);
 });
 
-canvas.addEventListener('mousedown', (e) => {
+// Suporte a coordenadas para Mouse e Touch
+function getCanvasCoords(e) {
   const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  
+  let clientX = e.clientX;
+  let clientY = e.clientY;
 
-  if (mx >= magnet.x - magnet.width/2 && mx <= magnet.x + magnet.width/2 &&
-      my >= magnet.y - magnet.height/2 && my <= magnet.y + magnet.height/2) {
-    magnet.isDragging = true;
-    magnet.dragOffsetX = mx - magnet.x;
+  if (e.touches && e.touches.length > 0) {
+    clientX = e.touches[0].clientX;
+    clientY = e.touches[0].clientY;
   }
-});
 
-canvas.addEventListener('mousemove', (e) => {
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY
+  };
+}
+
+function handleStart(e) {
+  const coords = getCanvasCoords(e);
+  // Só ativa a interatividade se o toque for dentro dos limites do Ímã
+  if (coords.x >= magnet.x - magnet.width/2 && coords.x <= magnet.x + magnet.width/2 &&
+      coords.y >= magnet.y - magnet.height/2 && coords.y <= magnet.y + magnet.height/2) {
+    magnet.isDragging = true;
+    magnet.dragOffsetX = coords.x - magnet.x;
+    if (e.cancelable) e.preventDefault(); // Impede o scroll apenas se estiver arrastando o ímã
+  }
+}
+
+function handleMove(e) {
   if (magnet.isDragging) {
-    const rect = canvas.getBoundingClientRect();
-    magnet.x = (e.clientX - rect.left) - magnet.dragOffsetX;
+    if (e.cancelable) e.preventDefault(); // Cancela o scroll enquanto move o ímã
+    const coords = getCanvasCoords(e);
+    magnet.x = coords.x - magnet.dragOffsetX;
     magnet.x = Math.max(90, Math.min(860, magnet.x));
   }
-});
+}
 
-window.addEventListener('mouseup', () => magnet.isDragging = false);
+function handleEnd() {
+  magnet.isDragging = false;
+}
+
+canvas.addEventListener('mousedown', handleStart);
+canvas.addEventListener('mousemove', handleMove);
+window.addEventListener('mouseup', handleEnd);
+
+canvas.addEventListener('touchstart', handleStart, { passive: false });
+canvas.addEventListener('touchmove', handleMove, { passive: false });
+window.addEventListener('touchend', handleEnd);
 
 function calculateFlux() {
   const dist = (magnet.x - coil.x);
